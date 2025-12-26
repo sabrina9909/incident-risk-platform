@@ -1,0 +1,15 @@
+﻿services:
+  postgres:
+    image: postgres:16
+    container_name: irp_postgres
+    environment:
+      POSTGRES_DB: incidentdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - irp_pgdata:/var/lib/postgresql/data
+
+volumes:
+  irp_pgdata:

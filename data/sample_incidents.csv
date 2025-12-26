@@ -1,0 +1,4 @@
+occurred_at,source_system,category,severity,location_code
+2025-12-01T03:10:00Z,cctv,illegal_parking,3,Daejeon-101
+2025-12-02T12:30:00Z,cctv,bus_lane,4,Daejeon-055
+2025-12-03T18:05:00Z,mobile,signal_violation,5,Daejeon-210

@@ -1,0 +1,165 @@
+﻿using IncidentRiskPlatform.Application.Services;
+using IncidentRiskPlatform.Domain.Entities;
+using Microsoft.AspNetCore.Mvc;
+using CsvHelper;
+using System.Globalization;
+
+namespace IncidentRiskPlatform.Api.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public sealed class IncidentsController : ControllerBase
+{
+    private readonly IncidentService _service;
+
+    public IncidentsController(IncidentService service) => _service = service;
+
+    [HttpGet("ping")]
+    public ActionResult Ping() => Ok(new { ok = true, message = "Incidents controller wired" });
+
+    [HttpPost]
+    public async Task<ActionResult<Incident>> Create([FromBody] CreateIncidentRequest req, CancellationToken ct)
+    {
+        try
+        {
+            var incident = new Incident(req.OccurredAt, req.SourceSystem, req.Category, req.Severity, req.LocationCode);
+            var saved = await _service.CreateAsync(incident, ct);
+            return CreatedAtAction(nameof(GetById), new { id = saved.Id }, saved);
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<Incident>> GetById(Guid id, CancellationToken ct)
+    {
+        var item = await _service.GetByIdAsync(id, ct);
+        return item is null ? NotFound() : Ok(item);
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<List<Incident>>> Query(
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] DateTimeOffset? to,
+        [FromQuery] int? severityMin,
+        [FromQuery] int? severityMax,
+        [FromQuery] string? sourceSystem,
+        [FromQuery] string? category,
+        [FromQuery] string? locationCode,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default)
+    {
+        var items = await _service.QueryAsync(
+            from, to,
+            severityMin, severityMax,
+            sourceSystem, category, locationCode,
+            page, pageSize,
+            ct);
+
+        return Ok(items);
+    }
+
+    [HttpPost("seed")]
+    public async Task<ActionResult> Seed([FromQuery] int count = 200, CancellationToken ct = default)
+    {
+        count = count is < 1 or > 5000 ? 200 : count;
+
+        var categories = new[] { "illegal_parking", "bus_lane", "signal_violation" };
+        var sources = new[] { "cctv", "mobile", "manual" };
+        var rnd = Random.Shared;
+
+        for (int i = 0; i < count; i++)
+        {
+            var occurred = DateTimeOffset.UtcNow.AddMinutes(-rnd.Next(0, 60 * 24 * 30));
+            var incident = new Incident(
+                occurred,
+                sources[rnd.Next(sources.Length)],
+                categories[rnd.Next(categories.Length)],
+                rnd.Next(1, 6),
+                $"Daejeon-{rnd.Next(1, 400):D3}"
+            );
+
+            await _service.CreateAsync(incident, ct);
+        }
+
+        return Ok(new { inserted = count });
+    }
+
+    [HttpPost("import")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult> ImportCsv([FromForm] IFormFile file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "CSV file is required." });
+
+        if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "Only .csv files are supported." });
+
+        int inserted = 0;
+        int skipped = 0;
+
+        using var stream = file.OpenReadStream();
+        using var reader = new StreamReader(stream);
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+
+        await csv.ReadAsync();
+        csv.ReadHeader();
+
+        while (await csv.ReadAsync())
+        {
+            try
+            {
+                var occurredAtStr = csv.GetField("occurred_at");
+                var sourceSystem = csv.GetField("source_system");
+                var category = csv.GetField("category");
+                var severityStr = csv.GetField("severity");
+                var locationCode = csv.GetField("location_code");
+
+                if (!DateTimeOffset.TryParse(occurredAtStr, out var occurredAt))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                if (!int.TryParse(severityStr, out var severity))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                var incident = new Incident(
+                    occurredAt,
+                    sourceSystem,
+                    category,
+                    severity,
+                    string.IsNullOrWhiteSpace(locationCode) ? null : locationCode
+                );
+
+                await _service.CreateAsync(incident, ct);
+                inserted++;
+            }
+            catch
+            {
+                skipped++;
+            }
+        }
+
+        return Ok(new { inserted, skipped });
+    }
+}
+
+public sealed class CreateIncidentRequest
+{
+    public DateTimeOffset OccurredAt { get; set; }
+    public string SourceSystem { get; set; } = default!;
+    public string Category { get; set; } = default!;
+    public int Severity { get; set; }
+    public string? LocationCode { get; set; }
+}

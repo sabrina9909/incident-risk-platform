@@ -1,0 +1,54 @@
+﻿# =========================
+# .NET / Visual Studio
+# =========================
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+.idea/
+*.sln.iml
+
+# Rider
+.idea/
+*.sln.DotSettings.user
+
+# =========================
+# OS junk
+# =========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Local config / secrets
+# =========================
+**/appsettings.Development.json
+**/appsettings.*.Development.json
+**/secrets.json
+.env
+.env.*
+
+# =========================
+# Test results / coverage
+# =========================
+TestResults/
+coverage/
+coverage.cobertura.xml
+*.trx
+
+# =========================
+# NuGet / tooling caches (optional)
+# =========================
+.nuget/
